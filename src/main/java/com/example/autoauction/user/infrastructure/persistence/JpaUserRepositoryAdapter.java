@@ -20,7 +20,6 @@ public class JpaUserRepositoryAdapter implements UserRepository {
 
     @Override
     public User save(User user) {
-        // Minimal adapter for now: roles persistence will be added with real use-cases.
         JpaUserEntity entity = new JpaUserEntity(
                 user.getUsername(),
                 user.getEmail(),
@@ -45,6 +44,12 @@ public class JpaUserRepositoryAdapter implements UserRepository {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<User> findByEmail(String email) {
+        return jpaRepository.findByEmail(email).map(UserMapper::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<User> findAll() {
         return jpaRepository.findAll().stream().map(UserMapper::toDomain).toList();
     }
@@ -53,5 +58,14 @@ public class JpaUserRepositoryAdapter implements UserRepository {
     public void deleteById(Long id) {
         jpaRepository.deleteById(id);
     }
-}
 
+    @Override
+    public boolean existsByUsername(String username) {
+        return jpaRepository.existsByUsername(username);
+    }
+
+    @Override
+    public boolean existsByEmail(String email) {
+        return jpaRepository.existsByEmail(email);
+    }
+}

@@ -1,17 +1,7 @@
 package com.example.autoauction.user.infrastructure.persistence;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.JoinTable;
-import jakarta.persistence.ManyToMany;
-import jakarta.persistence.Table;
-
-import java.time.Instant;
+import jakarta.persistence.*;
+import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -23,25 +13,25 @@ public class JpaUserEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "username", nullable = false, unique = true, length = 50)
+    @Column(unique = true, nullable = false, length = 50)
     private String username;
 
-    @Column(name = "email", nullable = false, unique = true, length = 255)
+    @Column(unique = true, nullable = false)
     private String email;
 
-    @Column(name = "password_hash", nullable = false, length = 255)
+    @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
-    @Column(name = "active", nullable = false)
-    private boolean active = true;
+    @Column(nullable = false)
+    private boolean active;
 
     @Column(name = "created_at")
-    private Instant createdAt;
+    private OffsetDateTime createdAt;
 
     @Column(name = "updated_at")
-    private Instant updatedAt;
+    private OffsetDateTime updatedAt;
 
-    @ManyToMany(fetch = FetchType.LAZY)
+    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "user_roles",
             joinColumns = @JoinColumn(name = "user_id"),
@@ -49,75 +39,52 @@ public class JpaUserEntity {
     )
     private Set<JpaRoleEntity> roles = new HashSet<>();
 
-    protected JpaUserEntity() {
-        // for JPA
-    }
+    // Конструктор по умолчанию для JPA
+    protected JpaUserEntity() {}
 
+    // Конструктор для создания без id
     public JpaUserEntity(String username, String email, String passwordHash, boolean active) {
         this.username = username;
         this.email = email;
         this.passwordHash = passwordHash;
         this.active = active;
+        this.createdAt = OffsetDateTime.now();
+        this.updatedAt = OffsetDateTime.now();
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
+    // Конструктор с id (для маппинга из домена)
+    public JpaUserEntity(Long id, String username, String email, String passwordHash, boolean active) {
+        this.id = id;
         this.username = username;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
         this.email = email;
-    }
-
-    public String getPasswordHash() {
-        return passwordHash;
-    }
-
-    public void setPasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
-    }
-
-    public boolean isActive() {
-        return active;
-    }
-
-    public void setActive(boolean active) {
         this.active = active;
+        this.createdAt = OffsetDateTime.now();
+        this.updatedAt = OffsetDateTime.now();
     }
 
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
+    // Геттеры и сеттеры
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public void setCreatedAt(Instant createdAt) {
-        this.createdAt = createdAt;
-    }
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
 
-    public Instant getUpdatedAt() {
-        return updatedAt;
-    }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
 
-    public void setUpdatedAt(Instant updatedAt) {
-        this.updatedAt = updatedAt;
-    }
+    public String getPasswordHash() { return passwordHash; }
+    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
 
-    public Set<JpaRoleEntity> getRoles() {
-        return roles;
-    }
+    public boolean isActive() { return active; }
+    public void setActive(boolean active) { this.active = active; }
 
-    public void setRoles(Set<JpaRoleEntity> roles) {
-        this.roles = roles;
-    }
+    public OffsetDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
+
+    public OffsetDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public Set<JpaRoleEntity> getRoles() { return roles; }
+    public void setRoles(Set<JpaRoleEntity> roles) { this.roles = roles; }
 }
-

@@ -25,6 +25,9 @@ public class UserService {
         log.info("UserService: Attempting to create user with username: {}", user.getUsername());
         return userRepository.save(user);
     }
+    public Optional<User> findByEmail(String email) {
+        return userRepository.findByEmail(email);
+    }
 
     public Optional<User> getUser(Long id) {
         return userRepository.findById(id);

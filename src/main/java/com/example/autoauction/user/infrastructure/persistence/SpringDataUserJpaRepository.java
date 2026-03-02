@@ -1,13 +1,17 @@
 package com.example.autoauction.user.infrastructure.persistence;
 
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
-
+import org.springframework.stereotype.Repository;
 import java.util.Optional;
 
+@Repository
 public interface SpringDataUserJpaRepository extends JpaRepository<JpaUserEntity, Long> {
 
-    @EntityGraph(attributePaths = "roles")
     Optional<JpaUserEntity> findByUsername(String username);
-}
 
+    Optional<JpaUserEntity> findByEmail(String email);
+
+    boolean existsByUsername(String username);
+
+    boolean existsByEmail(String email);
+}
