@@ -1,0 +1,119 @@
+package com.example.autoauction.auction.infrastructure.persistence;
+
+import com.example.autoauction.auction.domain.AuctionStatus;
+import jakarta.persistence.*;
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
+
+@Entity
+@Table(name = "auctions")
+public class JpaAuctionEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "vehicle_id", nullable = false)
+    private Long vehicleId;
+
+    @Column(name = "vehicle_info", columnDefinition = "TEXT")
+    private String vehicleInfo;
+
+    @Column(name = "starting_price", nullable = false, precision = 10, scale = 2)
+    private BigDecimal startingPrice;
+
+    @Column(name = "current_price", nullable = false, precision = 10, scale = 2)
+    private BigDecimal currentPrice;
+
+    @Column(name = "reserve_price", precision = 10, scale = 2)
+    private BigDecimal reservePrice;
+
+    @Column(name = "buy_now_price", precision = 10, scale = 2)
+    private BigDecimal buyNowPrice;
+
+    @Column(name = "min_bid_step", nullable = false, precision = 10, scale = 2)
+    private BigDecimal minBidStep;
+
+    @Column(name = "start_time", nullable = false)
+    private OffsetDateTime startTime;
+
+    @Column(name = "end_time", nullable = false)
+    private OffsetDateTime endTime;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
+    private AuctionStatus status;
+
+    @Column(name = "winner_id")
+    private Long winnerId;
+
+    @Column(name = "winning_bid", precision = 10, scale = 2)
+    private BigDecimal winningBid;
+
+    @Column(name = "total_bids", nullable = false)
+    private Integer totalBids = 0;
+
+    @Column(name = "created_by", nullable = false)
+    private Long createdBy;
+
+    @Column(name = "created_at", nullable = false)
+    private OffsetDateTime createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private OffsetDateTime updatedAt;
+
+    // Конструктор по умолчанию для JPA
+    protected JpaAuctionEntity() {}
+
+    // Геттеры и сеттеры
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+
+    public Long getVehicleId() { return vehicleId; }
+    public void setVehicleId(Long vehicleId) { this.vehicleId = vehicleId; }
+
+    public String getVehicleInfo() { return vehicleInfo; }
+    public void setVehicleInfo(String vehicleInfo) { this.vehicleInfo = vehicleInfo; }
+
+    public BigDecimal getStartingPrice() { return startingPrice; }
+    public void setStartingPrice(BigDecimal startingPrice) { this.startingPrice = startingPrice; }
+
+    public BigDecimal getCurrentPrice() { return currentPrice; }
+    public void setCurrentPrice(BigDecimal currentPrice) { this.currentPrice = currentPrice; }
+
+    public BigDecimal getReservePrice() { return reservePrice; }
+    public void setReservePrice(BigDecimal reservePrice) { this.reservePrice = reservePrice; }
+
+    public BigDecimal getBuyNowPrice() { return buyNowPrice; }
+    public void setBuyNowPrice(BigDecimal buyNowPrice) { this.buyNowPrice = buyNowPrice; }
+
+    public BigDecimal getMinBidStep() { return minBidStep; }
+    public void setMinBidStep(BigDecimal minBidStep) { this.minBidStep = minBidStep; }
+
+    public OffsetDateTime getStartTime() { return startTime; }
+    public void setStartTime(OffsetDateTime startTime) { this.startTime = startTime; }
+
+    public OffsetDateTime getEndTime() { return endTime; }
+    public void setEndTime(OffsetDateTime endTime) { this.endTime = endTime; }
+
+    public AuctionStatus getStatus() { return status; }
+    public void setStatus(AuctionStatus status) { this.status = status; }
+
+    public Long getWinnerId() { return winnerId; }
+    public void setWinnerId(Long winnerId) { this.winnerId = winnerId; }
+
+    public BigDecimal getWinningBid() { return winningBid; }
+    public void setWinningBid(BigDecimal winningBid) { this.winningBid = winningBid; }
+
+    public Integer getTotalBids() { return totalBids; }
+    public void setTotalBids(Integer totalBids) { this.totalBids = totalBids; }
+
+    public Long getCreatedBy() { return createdBy; }
+    public void setCreatedBy(Long createdBy) { this.createdBy = createdBy; }
+
+    public OffsetDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
+
+    public OffsetDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
+}

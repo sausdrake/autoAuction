@@ -38,16 +38,26 @@ public class AuthController {
 
     @PostMapping("/login")
     @Operation(summary = "Вход в систему")
-    public ResponseEntity<AuthService.AuthResponse> login(
-            @Valid @RequestBody LoginRequest request
-    ) {
+    public ResponseEntity<AuthService.AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+        System.out.println("=== LOGIN ATTEMPT ===");
+        System.out.println("Username: " + request.username());
+        System.out.println("Password: " + request.password());
+
         AuthService.AuthResponse response = authService.authenticate(
                 new AuthService.LoginRequest(
                         request.username(),
                         request.password()
                 )
         );
+
+        System.out.println("=== LOGIN SUCCESS ===");
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/create-hash")
+    @Operation(summary = "Создать хеш пароля (временный)")
+    public String createHash(@RequestParam String password) {
+        return authService.createPasswordHash(password);
     }
 
     public record RegisterRequest(
