@@ -144,7 +144,7 @@ D — Dependency Inversion
 •	устойчивость к конкурентным запросам;
 •	изоляцию бизнес-логики от инфраструктуры.
 
-
+jwt token= eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTc3MjgwNzM2NSwiZXhwIjoxNzcyODkzNzY1fQ.toF_1vVDT-l1qtD7KpFPXkQGfRUkF97r30YC_Nl154c
 
 Task:
 1) проверить и улучшить аудентификацию при необходимости.или исправить если есть необходимость. 

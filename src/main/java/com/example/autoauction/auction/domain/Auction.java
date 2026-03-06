@@ -45,6 +45,7 @@ public class Auction {
         this.updatedAt = OffsetDateTime.now();
     }
 
+
     // Геттеры (без сеттеров для неизменяемости)
     public Long getId() { return id; }
     public Long getVehicleId() { return vehicleId; }
@@ -129,6 +130,7 @@ public class Auction {
 
     public void setVehicleInfo(String vehicleInfo) {
         this.vehicleInfo = vehicleInfo;
+        this.updatedAt = OffsetDateTime.now();
     }
 
     public void setCreatedAt(OffsetDateTime createdAt) {
