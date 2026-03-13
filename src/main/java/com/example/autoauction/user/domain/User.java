@@ -1,8 +1,11 @@
 package com.example.autoauction.user.domain;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.extern.slf4j.Slf4j;
+
 import java.util.Set;
 
+@Slf4j
 @Schema(description = "Пользователь системы")
 public class User {
 

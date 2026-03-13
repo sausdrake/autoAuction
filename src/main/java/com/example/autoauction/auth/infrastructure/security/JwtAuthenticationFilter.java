@@ -25,7 +25,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     // Список публичных путей, которые не требуют JWT токена
     private static final List<String> PUBLIC_PATHS = Arrays.asList(
-            "/api/auth/",
+            "/api/auth",
             "/swagger-ui",
             "/api-docs",
             "/h2-console"

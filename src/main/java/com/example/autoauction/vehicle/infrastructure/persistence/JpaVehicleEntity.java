@@ -4,9 +4,12 @@ import com.example.autoauction.vehicle.domain.FuelType;
 import com.example.autoauction.vehicle.domain.VehicleStatus;
 import com.example.autoauction.vehicle.domain.VehicleType;
 import jakarta.persistence.*;
+import lombok.extern.slf4j.Slf4j;
+
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
+@Slf4j
 @Entity
 @Table(name = "vehicles")
 public class JpaVehicleEntity {

@@ -2,9 +2,11 @@ package com.example.autoauction.auction.web.dto;
 
 import com.example.autoauction.auction.domain.AuctionStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.extern.slf4j.Slf4j;
+
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-
+@Slf4j
 @Schema(description = "Ответ с данными аукциона")
 public record AuctionResponse(
 

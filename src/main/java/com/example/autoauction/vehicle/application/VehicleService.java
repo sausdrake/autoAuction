@@ -6,6 +6,7 @@ import com.example.autoauction.vehicle.domain.port.VehicleRepository;
 import com.example.autoauction.vehicle.web.dto.VehicleCreateRequest;
 import com.example.autoauction.vehicle.web.dto.VehicleUpdateRequest;
 import com.example.autoauction.vehicle.web.dto.VehicleResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,6 +14,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class VehicleService {
 
@@ -20,14 +22,23 @@ public class VehicleService {
 
     public VehicleService(VehicleRepository vehicleRepository) {
         this.vehicleRepository = vehicleRepository;
+        log.info("VehicleService инициализирован");
     }
 
     @Transactional
     public VehicleResponse createDraft(VehicleCreateRequest request, Long diagnosticId, String diagnosticName) {
+        log.info("=== СОЗДАНИЕ ЧЕРНОВИКА АВТОМОБИЛЯ ===");
+        log.info("Диагностик: {} (ID: {}), VIN: {}", diagnosticName, diagnosticId, request.vin());
+        log.debug("Детали запроса: brand={}, model={}, year={}, type={}",
+                request.brand(), request.model(), request.year(), request.type());
+
         // Проверяем уникальность VIN
+        log.debug("Проверка уникальности VIN: {}", request.vin());
         if (vehicleRepository.existsByVin(request.vin())) {
+            log.error("Автомобиль с VIN {} уже существует", request.vin());
             throw new IllegalArgumentException("Автомобиль с таким VIN уже существует");
         }
+        log.debug("VIN уникален");
 
         Vehicle vehicle = new Vehicle(
                 request.brand(),
@@ -40,142 +51,289 @@ public class VehicleService {
         );
 
         // Заполняем опциональные поля
-        vehicle.setLicensePlate(request.licensePlate());
-        vehicle.setColor(request.color());
-        vehicle.setMileage(request.mileage());
-        vehicle.setEngineCapacity(request.engineCapacity());
-        vehicle.setFuelType(request.fuelType());
-        vehicle.setTransmission(request.transmission());
-        vehicle.setDescription(request.description());
+        if (request.licensePlate() != null) {
+            vehicle.setLicensePlate(request.licensePlate());
+            log.debug("Установлен госномер: {}", request.licensePlate());
+        }
+        if (request.color() != null) {
+            vehicle.setColor(request.color());
+            log.debug("Установлен цвет: {}", request.color());
+        }
+        if (request.mileage() != null) {
+            vehicle.setMileage(request.mileage());
+            log.debug("Установлен пробег: {}", request.mileage());
+        }
+        if (request.engineCapacity() != null) {
+            vehicle.setEngineCapacity(request.engineCapacity());
+            log.debug("Установлен объем двигателя: {}", request.engineCapacity());
+        }
+        if (request.fuelType() != null) {
+            vehicle.setFuelType(request.fuelType());
+            log.debug("Установлен тип топлива: {}", request.fuelType());
+        }
+        if (request.transmission() != null) {
+            vehicle.setTransmission(request.transmission());
+            log.debug("Установлена коробка передач: {}", request.transmission());
+        }
+        if (request.description() != null) {
+            vehicle.setDescription(request.description());
+            log.debug("Установлено описание");
+        }
 
+        log.debug("Сохранение автомобиля в БД");
         Vehicle saved = vehicleRepository.save(vehicle);
+        log.info("Автомобиль успешно создан! ID: {}, статус: {}", saved.getId(), saved.getStatus());
+
         return VehicleResponse.fromDomain(saved);
     }
 
     @Transactional(readOnly = true)
     public List<VehicleResponse> getMyVehicles(Long diagnosticId, VehicleStatus status) {
+        log.debug("=== ПОЛУЧЕНИЕ АВТОМОБИЛЕЙ ДИАГНОСТИКА ID: {} ===", diagnosticId);
+        List<VehicleResponse> vehicles;
+
         if (status != null) {
-            return vehicleRepository.findByDiagnosticIdAndStatus(diagnosticId, status).stream()
+            log.debug("Фильтр по статусу: {}", status);
+            vehicles = vehicleRepository.findByDiagnosticIdAndStatus(diagnosticId, status).stream()
+                    .map(VehicleResponse::fromDomain)
+                    .collect(Collectors.toList());
+        } else {
+            vehicles = vehicleRepository.findByDiagnosticId(diagnosticId).stream()
                     .map(VehicleResponse::fromDomain)
                     .collect(Collectors.toList());
         }
-        return vehicleRepository.findByDiagnosticId(diagnosticId).stream()
-                .map(VehicleResponse::fromDomain)
-                .collect(Collectors.toList());
+
+        log.debug("Найдено автомобилей: {}", vehicles.size());
+        return vehicles;
     }
 
     @Transactional(readOnly = true)
     public VehicleResponse getVehicle(Long id, Long diagnosticId) {
+        log.debug("=== ПОЛУЧЕНИЕ АВТОМОБИЛЯ ID: {} ДИАГНОСТИКОМ ID: {} ===", id, diagnosticId);
+
         Vehicle vehicle = vehicleRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Автомобиль не найден: " + id));
+                .orElseThrow(() -> {
+                    log.error("Автомобиль не найден: {}", id);
+                    return new IllegalArgumentException("Автомобиль не найден: " + id);
+                });
+
+        log.debug("Автомобиль найден: {} {} {}, статус: {}",
+                vehicle.getBrand(), vehicle.getModel(), vehicle.getYear(), vehicle.getStatus());
 
         // Проверяем, что автомобиль принадлежит диагностику
         if (!vehicle.getDiagnosticId().equals(diagnosticId)) {
+            log.error("Доступ запрещен: автомобиль принадлежит диагностику ID: {}, текущий ID: {}",
+                    vehicle.getDiagnosticId(), diagnosticId);
             throw new SecurityException("У вас нет доступа к этому автомобилю");
         }
+        log.debug("Проверка доступа пройдена");
 
         return VehicleResponse.fromDomain(vehicle);
     }
 
     @Transactional
     public VehicleResponse updateDraft(Long id, VehicleUpdateRequest request, Long diagnosticId) {
+        log.info("=== ОБНОВЛЕНИЕ ЧЕРНОВИКА ID: {} ===", id);
+        log.info("Диагностик ID: {}", diagnosticId);
+
         Vehicle vehicle = vehicleRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Автомобиль не найден: " + id));
+                .orElseThrow(() -> {
+                    log.error("Автомобиль не найден: {}", id);
+                    return new IllegalArgumentException("Автомобиль не найден: " + id);
+                });
+
+        log.debug("Текущий статус автомобиля: {}", vehicle.getStatus());
 
         // Проверяем права доступа
         if (!vehicle.getDiagnosticId().equals(diagnosticId)) {
+            log.error("Доступ запрещен: автомобиль принадлежит диагностику ID: {}",
+                    vehicle.getDiagnosticId());
             throw new SecurityException("У вас нет доступа к этому автомобилю");
         }
 
         // Проверяем статус
         if (vehicle.getStatus() != VehicleStatus.DRAFT && vehicle.getStatus() != VehicleStatus.NEEDS_FIXES) {
+            log.error("Нельзя редактировать автомобиль в статусе: {}", vehicle.getStatus());
             throw new IllegalStateException("Нельзя редактировать автомобиль в статусе: " + vehicle.getStatus());
         }
 
         // Обновляем только те поля, которые пришли в запросе
-        if (request.licensePlate() != null) vehicle.setLicensePlate(request.licensePlate());
-        if (request.color() != null) vehicle.setColor(request.color());
-        if (request.mileage() != null) vehicle.setMileage(request.mileage());
-        if (request.engineCapacity() != null) vehicle.setEngineCapacity(request.engineCapacity());
-        if (request.fuelType() != null) vehicle.setFuelType(request.fuelType());
-        if (request.transmission() != null) vehicle.setTransmission(request.transmission());
-        if (request.description() != null) vehicle.setDescription(request.description());
+        if (request.licensePlate() != null) {
+            vehicle.setLicensePlate(request.licensePlate());
+            log.debug("Обновлен госномер: {}", request.licensePlate());
+        }
+        if (request.color() != null) {
+            vehicle.setColor(request.color());
+            log.debug("Обновлен цвет: {}", request.color());
+        }
+        if (request.mileage() != null) {
+            vehicle.setMileage(request.mileage());
+            log.debug("Обновлен пробег: {}", request.mileage());
+        }
+        if (request.engineCapacity() != null) {
+            vehicle.setEngineCapacity(request.engineCapacity());
+            log.debug("Обновлен объем двигателя: {}", request.engineCapacity());
+        }
+        if (request.fuelType() != null) {
+            vehicle.setFuelType(request.fuelType());
+            log.debug("Обновлен тип топлива: {}", request.fuelType());
+        }
+        if (request.transmission() != null) {
+            vehicle.setTransmission(request.transmission());
+            log.debug("Обновлена коробка передач: {}", request.transmission());
+        }
+        if (request.description() != null) {
+            vehicle.setDescription(request.description());
+            log.debug("Обновлено описание");
+        }
 
         vehicle.setUpdatedAt(OffsetDateTime.now());
+        log.debug("Сохранение изменений в БД");
+
         Vehicle updated = vehicleRepository.save(vehicle);
+        log.info("Автомобиль обновлен, статус: {}", updated.getStatus());
+
         return VehicleResponse.fromDomain(updated);
     }
 
     @Transactional
     public VehicleResponse submitForReview(Long id, Long diagnosticId) {
+        log.info("=== ОТПРАВКА НА ПРОВЕРКУ АВТОМОБИЛЯ ID: {} ===", id);
+        log.info("Диагностик ID: {}", diagnosticId);
+
         Vehicle vehicle = vehicleRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Автомобиль не найден: " + id));
+                .orElseThrow(() -> {
+                    log.error("Автомобиль не найден: {}", id);
+                    return new IllegalArgumentException("Автомобиль не найден: " + id);
+                });
+
+        log.debug("Текущий статус: {}", vehicle.getStatus());
 
         if (!vehicle.getDiagnosticId().equals(diagnosticId)) {
+            log.error("Доступ запрещен: автомобиль принадлежит диагностику ID: {}",
+                    vehicle.getDiagnosticId());
             throw new SecurityException("У вас нет доступа к этому автомобилю");
         }
 
         vehicle.submitForReview();
+        log.info("Автомобиль отправлен на проверку, новый статус: PENDING_REVIEW");
+
         Vehicle updated = vehicleRepository.save(vehicle);
+        log.debug("Автомобиль сохранен в БД");
+
         return VehicleResponse.fromDomain(updated);
     }
 
     @Transactional
     public void deleteDraft(Long id, Long diagnosticId) {
+        log.info("=== УДАЛЕНИЕ ЧЕРНОВИКА АВТОМОБИЛЯ ID: {} ===", id);
+        log.info("Диагностик ID: {}", diagnosticId);
+
         Vehicle vehicle = vehicleRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Автомобиль не найден: " + id));
+                .orElseThrow(() -> {
+                    log.error("Автомобиль не найден: {}", id);
+                    return new IllegalArgumentException("Автомобиль не найден: " + id);
+                });
+
+        log.debug("Текущий статус: {}", vehicle.getStatus());
 
         if (!vehicle.getDiagnosticId().equals(diagnosticId)) {
+            log.error("Доступ запрещен: автомобиль принадлежит диагностику ID: {}",
+                    vehicle.getDiagnosticId());
             throw new SecurityException("У вас нет доступа к этому автомобилю");
         }
 
         if (vehicle.getStatus() != VehicleStatus.DRAFT) {
+            log.error("Нельзя удалить автомобиль в статусе: {}. Можно удалить только черновик",
+                    vehicle.getStatus());
             throw new IllegalStateException("Можно удалить только черновик");
         }
 
         vehicleRepository.deleteById(id);
+        log.info("Автомобиль успешно удален");
     }
 
     // ========== МЕТОДЫ ДЛЯ АДМИНА ==========
 
     @Transactional(readOnly = true)
     public List<VehicleResponse> getVehiclesByStatus(VehicleStatus status) {
-        return vehicleRepository.findByStatus(status).stream()
+        log.debug("=== ПОЛУЧЕНИЕ АВТОМОБИЛЕЙ ПО СТАТУСУ: {} ===", status);
+        List<VehicleResponse> vehicles = vehicleRepository.findByStatus(status).stream()
                 .map(VehicleResponse::fromDomain)
                 .collect(Collectors.toList());
+        log.debug("Найдено автомобилей: {}", vehicles.size());
+        return vehicles;
     }
 
     @Transactional(readOnly = true)
     public List<VehicleResponse> getVehiclesByStatuses(List<VehicleStatus> statuses) {
-        return vehicleRepository.findByStatusIn(statuses).stream()
+        log.debug("=== ПОЛУЧЕНИЕ АВТОМОБИЛЕЙ ПО СПИСКУ СТАТУСОВ: {} ===", statuses);
+        List<VehicleResponse> vehicles = vehicleRepository.findByStatusIn(statuses).stream()
                 .map(VehicleResponse::fromDomain)
                 .collect(Collectors.toList());
+        log.debug("Найдено автомобилей: {}", vehicles.size());
+        return vehicles;
     }
 
     @Transactional(readOnly = true)
     public VehicleResponse getVehicleDetails(Long id) {
+        log.debug("=== ПОЛУЧЕНИЕ ДЕТАЛЕЙ АВТОМОБИЛЯ ID: {} ===", id);
         Vehicle vehicle = vehicleRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Автомобиль не найден: " + id));
+                .orElseThrow(() -> {
+                    log.error("Автомобиль не найден: {}", id);
+                    return new IllegalArgumentException("Автомобиль не найден: " + id);
+                });
+
+        log.debug("Автомобиль: {} {} {}, статус: {}, диагностик ID: {}",
+                vehicle.getBrand(), vehicle.getModel(), vehicle.getYear(),
+                vehicle.getStatus(), vehicle.getDiagnosticId());
+
         return VehicleResponse.fromDomain(vehicle);
     }
 
     @Transactional
     public VehicleResponse approveVehicle(Long vehicleId, Long adminId, String adminName) {
+        log.info("=== ОДОБРЕНИЕ АВТОМОБИЛЯ ID: {} ===", vehicleId);
+        log.info("Администратор: {} (ID: {})", adminName, adminId);
+
         Vehicle vehicle = vehicleRepository.findById(vehicleId)
-                .orElseThrow(() -> new IllegalArgumentException("Автомобиль не найден: " + vehicleId));
+                .orElseThrow(() -> {
+                    log.error("Автомобиль не найден: {}", vehicleId);
+                    return new IllegalArgumentException("Автомобиль не найден: " + vehicleId);
+                });
+
+        log.debug("Текущий статус: {}, диагностик: {}",
+                vehicle.getStatus(), vehicle.getDiagnosticName());
 
         vehicle.approve(adminId, adminName);
+        log.info("Автомобиль одобрен, новый статус: APPROVED");
+
         Vehicle updated = vehicleRepository.save(vehicle);
+        log.debug("Автомобиль сохранен в БД");
+
         return VehicleResponse.fromDomain(updated);
     }
 
     @Transactional
     public VehicleResponse rejectVehicle(Long vehicleId, Long adminId, String adminName, String reason) {
+        log.info("=== ОТКЛОНЕНИЕ АВТОМОБИЛЯ ID: {} ===", vehicleId);
+        log.info("Администратор: {} (ID: {}), причина: {}", adminName, adminId, reason);
+
         Vehicle vehicle = vehicleRepository.findById(vehicleId)
-                .orElseThrow(() -> new IllegalArgumentException("Автомобиль не найден: " + vehicleId));
+                .orElseThrow(() -> {
+                    log.error("Автомобиль не найден: {}", vehicleId);
+                    return new IllegalArgumentException("Автомобиль не найден: " + vehicleId);
+                });
+
+        log.debug("Текущий статус: {}, диагностик: {}",
+                vehicle.getStatus(), vehicle.getDiagnosticName());
 
         vehicle.reject(adminId, adminName, reason);
+        log.info("Автомобиль отклонен, новый статус: NEEDS_FIXES");
+
         Vehicle updated = vehicleRepository.save(vehicle);
+        log.debug("Автомобиль сохранен в БД");
+
         return VehicleResponse.fromDomain(updated);
     }
 }

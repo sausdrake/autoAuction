@@ -3,9 +3,11 @@ package com.example.autoauction.auction.web.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
+import lombok.extern.slf4j.Slf4j;
+
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-
+@Slf4j
 @Schema(description = "Запрос на создание аукциона")
 public record AuctionCreateRequest(
 

@@ -35,15 +35,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Публичные эндпоинты - НЕ ТРЕБУЮТ АУТЕНТИФИКАЦИИ
                         .requestMatchers(
-                                new AntPathRequestMatcher("/api/auth/**"),
+                                new AntPathRequestMatcher("/api/auth/**"),   // ← ЭТО ОБЯЗАТЕЛЬНО!
                                 new AntPathRequestMatcher("/swagger-ui/**"),
                                 new AntPathRequestMatcher("/swagger-ui.html"),
                                 new AntPathRequestMatcher("/api-docs/**"),
                                 new AntPathRequestMatcher("/h2-console/**")
                         ).permitAll()
-                        // Админские эндпоинты - только для ADMIN
-                        .requestMatchers(new AntPathRequestMatcher("/api/admin/**")).permitAll()
-                        // Все остальные запросы требуют аутентификации
+                        .requestMatchers(new AntPathRequestMatcher("/api/admin/**")).hasRole("ADMIN")  // ← ИСПРАВЛЕНО
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session

@@ -1,10 +1,13 @@
 package com.example.autoauction.user.infrastructure.persistence;
 
 import jakarta.persistence.*;
+import lombok.extern.slf4j.Slf4j;
+
 import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
+@Slf4j
 @Entity
 @Table(name = "users")
 public class JpaUserEntity {

@@ -2,11 +2,13 @@ package com.example.autoauction.auction.infrastructure.persistence;
 
 import com.example.autoauction.auction.domain.Auction;
 import com.example.autoauction.auction.domain.AuctionStatus;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
+@Slf4j
 @Component
 public class AuctionMapper {
 

@@ -2,9 +2,12 @@ package com.example.autoauction.auction.infrastructure.persistence;
 
 import com.example.autoauction.auction.domain.AuctionStatus;
 import jakarta.persistence.*;
+import lombok.extern.slf4j.Slf4j;
+
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
+@Slf4j
 @Entity
 @Table(name = "auctions")
 public class JpaAuctionEntity {

@@ -2,12 +2,14 @@ package com.example.autoauction.user.infrastructure.persistence;
 
 import com.example.autoauction.user.domain.User;
 import com.example.autoauction.user.domain.port.UserRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
 
+@Slf4j
 @Repository
 @Transactional
 public class JpaUserRepositoryAdapter implements UserRepository {
