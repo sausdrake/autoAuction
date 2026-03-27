@@ -1,17 +1,17 @@
 package com.example.autoauction.admin.web;
 
+import com.example.autoauction.auth.domain.UserPrincipal;
+import com.example.autoauction.auth.infrastructure.security.CurrentUser;
 import com.example.autoauction.vehicle.application.VehicleService;
 import com.example.autoauction.vehicle.domain.VehicleStatus;
-import com.example.autoauction.vehicle.web.dto.VehicleApproveRequest;
 import com.example.autoauction.vehicle.web.dto.VehicleRejectRequest;
 import com.example.autoauction.vehicle.web.dto.VehicleResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -50,10 +50,12 @@ public class AdminVehicleController {
     @PostMapping("/{id}/approve")
     @Operation(summary = "Одобрить отчет")
     public ResponseEntity<VehicleResponse> approveVehicle(
+            @Parameter(description = "ID автомобиля", required = true)
             @PathVariable Long id,
-            @AuthenticationPrincipal UserDetails currentUser) {
-
-        Long adminId = 1L; // TODO: получить из SecurityContext
+            @Parameter(hidden = true)
+            @CurrentUser UserPrincipal currentUser
+    ) {
+        Long adminId = currentUser.getUserId();
         String adminName = currentUser.getUsername();
 
         VehicleResponse response = vehicleService.approveVehicle(id, adminId, adminName);
@@ -63,11 +65,13 @@ public class AdminVehicleController {
     @PostMapping("/{id}/reject")
     @Operation(summary = "Отклонить отчет")
     public ResponseEntity<VehicleResponse> rejectVehicle(
+            @Parameter(description = "ID автомобиля", required = true)
             @PathVariable Long id,
             @Valid @RequestBody VehicleRejectRequest request,
-            @AuthenticationPrincipal UserDetails currentUser) {
-
-        Long adminId = 1L; // TODO: получить из SecurityContext
+            @Parameter(hidden = true)
+            @CurrentUser UserPrincipal currentUser
+    ) {
+        Long adminId = currentUser.getUserId();
         String adminName = currentUser.getUsername();
 
         VehicleResponse response = vehicleService.rejectVehicle(id, adminId, adminName, request.reason());

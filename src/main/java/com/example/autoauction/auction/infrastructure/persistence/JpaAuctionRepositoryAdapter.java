@@ -3,14 +3,13 @@ package com.example.autoauction.auction.infrastructure.persistence;
 import com.example.autoauction.auction.domain.Auction;
 import com.example.autoauction.auction.domain.AuctionStatus;
 import com.example.autoauction.auction.domain.port.AuctionRepository;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
-@Slf4j
+
 @Repository
 @Transactional
 public class JpaAuctionRepositoryAdapter implements AuctionRepository {
@@ -41,6 +40,13 @@ public class JpaAuctionRepositoryAdapter implements AuctionRepository {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<Auction> findByIdWithLock(Long id) {
+        return jpaRepository.findByIdWithLock(id)
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<Auction> findAll() {
         return jpaRepository.findAll().stream()
                 .map(mapper::toDomain)
@@ -65,8 +71,29 @@ public class JpaAuctionRepositoryAdapter implements AuctionRepository {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<Auction> findFirstByVehicleIdOrderByCreatedAtDesc(Long vehicleId) {
+        return jpaRepository.findFirstByVehicleIdOrderByCreatedAtDesc(vehicleId)
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public boolean existsByVehicleIdAndStatus(Long vehicleId, AuctionStatus status) {
         return jpaRepository.existsByVehicleIdAndStatus(vehicleId, status);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsByVehicleIdAndStatusIn(Long vehicleId, List<AuctionStatus> statuses) {
+        return jpaRepository.existsByVehicleIdAndStatusIn(vehicleId, statuses);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AuctionStatus> findStatusesByVehicleId(Long vehicleId) {
+        return jpaRepository.findByVehicleId(vehicleId).stream()
+                .map(JpaAuctionEntity::getStatus)
+                .collect(Collectors.toList());
     }
 
     @Override

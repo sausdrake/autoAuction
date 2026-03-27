@@ -1,17 +1,17 @@
 package com.example.autoauction.admin.web;
 
 import com.example.autoauction.admin.application.AdminAuctionService;
+import com.example.autoauction.auth.domain.UserPrincipal;
+import com.example.autoauction.auth.infrastructure.security.CurrentUser;
 import com.example.autoauction.auction.web.dto.AuctionCreateRequest;
 import com.example.autoauction.auction.web.dto.AuctionResponse;
-import com.example.autoauction.vehicle.web.dto.VehicleResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -32,10 +32,11 @@ public class AdminAuctionController {
     @Operation(summary = "Создать новый аукцион")
     public ResponseEntity<AuctionResponse> createAuction(
             @Valid @RequestBody AuctionCreateRequest request,
-            @AuthenticationPrincipal UserDetails currentUser) {
-
-        // TODO: получить реальный ID администратора из SecurityContext
-        Long adminId = 1L;
+            @Parameter(hidden = true)
+            @CurrentUser UserPrincipal currentUser
+    ) {
+        Long adminId = currentUser.getUserId();
+        log.info("Admin {} creating auction for vehicle {}", adminId, request.vehicleId());
 
         AuctionResponse response = adminAuctionService.createAuction(request, adminId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -49,7 +50,10 @@ public class AdminAuctionController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Получить аукцион по ID")
-    public ResponseEntity<AuctionResponse> getAuction(@PathVariable Long id) {
+    public ResponseEntity<AuctionResponse> getAuction(
+            @Parameter(description = "ID аукциона", required = true)
+            @PathVariable Long id
+    ) {
         AuctionResponse response = adminAuctionService.getAuction(id);
         return ResponseEntity.ok(response);
     }
@@ -57,11 +61,13 @@ public class AdminAuctionController {
     @PostMapping("/{id}/start")
     @Operation(summary = "Запустить аукцион")
     public ResponseEntity<AuctionResponse> startAuction(
+            @Parameter(description = "ID аукциона", required = true)
             @PathVariable Long id,
-            @AuthenticationPrincipal UserDetails currentUser) {
-
-        // TODO: получить реальный ID администратора из SecurityContext
-        Long adminId = 1L;
+            @Parameter(hidden = true)
+            @CurrentUser UserPrincipal currentUser
+    ) {
+        Long adminId = currentUser.getUserId();
+        log.info("Admin {} starting auction {}", adminId, id);
 
         AuctionResponse response = adminAuctionService.startAuction(id, adminId);
         return ResponseEntity.ok(response);
@@ -70,32 +76,57 @@ public class AdminAuctionController {
     @PostMapping("/{id}/cancel")
     @Operation(summary = "Отменить аукцион")
     public ResponseEntity<AuctionResponse> cancelAuction(
+            @Parameter(description = "ID аукциона", required = true)
             @PathVariable Long id,
-            @AuthenticationPrincipal UserDetails currentUser) {
-
-        // TODO: получить реальный ID администратора из SecurityContext
-        Long adminId = 1L;
+            @Parameter(hidden = true)
+            @CurrentUser UserPrincipal currentUser
+    ) {
+        Long adminId = currentUser.getUserId();
+        log.info("Admin {} cancelling auction {}", adminId, id);
 
         AuctionResponse response = adminAuctionService.cancelAuction(id, adminId);
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/status/{status}")
+    @PostMapping("/{id}/complete")
+    @Operation(summary = "Принудительно завершить аукцион")
+    public ResponseEntity<AuctionResponse> completeAuction(
+            @Parameter(description = "ID аукциона", required = true)
+            @PathVariable Long id,
+            @Parameter(hidden = true)
+            @CurrentUser UserPrincipal currentUser
+    ) {
+        Long adminId = currentUser.getUserId();
+        log.info("Admin {} manually completing auction {}", adminId, id);
+
+        AuctionResponse response = adminAuctionService.completeAuction(id, adminId);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/by-status")
     @Operation(summary = "Получить аукционы по статусу")
-    public List<AuctionResponse> getAuctionsByStatus(@PathVariable String status) {
+    public List<AuctionResponse> getAuctionsByStatus(
+            @Parameter(description = "Статус аукциона", required = true, example = "ACTIVE")
+            @RequestParam String status
+    ) {
+        if (status == null || status.trim().isEmpty()) {
+            throw new IllegalArgumentException("Статус не может быть пустым");
+        }
+
+        if (!status.matches("^[A-Za-z_]+$")) {
+            log.warn("Попытка использования недопустимых символов в статусе: {}", status);
+            throw new IllegalArgumentException("Статус должен содержать только буквы и символ подчеркивания");
+        }
+
         return adminAuctionService.getAuctionsByStatus(status);
     }
 
     @GetMapping("/vehicle/{vehicleId}")
     @Operation(summary = "Получить аукционы по ID автомобиля")
-    public List<AuctionResponse> getAuctionsByVehicleId(@PathVariable Long vehicleId) {
+    public List<AuctionResponse> getAuctionsByVehicleId(
+            @Parameter(description = "ID автомобиля", required = true)
+            @PathVariable Long vehicleId
+    ) {
         return adminAuctionService.getAuctionsByVehicleId(vehicleId);
-    }
-
-    @GetMapping("/approved-vehicles")
-    @Operation(summary = "Получить список автомобилей готовых к аукциону")
-    public List<VehicleResponse> getApprovedVehicles() {
-        // Этот метод можно добавить позже для удобства
-        return List.of();
     }
 }

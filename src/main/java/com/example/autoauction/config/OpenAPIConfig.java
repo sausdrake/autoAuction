@@ -1,5 +1,6 @@
 package com.example.autoauction.config;
 
+import com.example.autoauction.auth.infrastructure.security.CurrentUser;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
@@ -9,14 +10,40 @@ import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import lombok.extern.slf4j.Slf4j;
+import org.springdoc.core.customizers.OperationCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.method.HandlerMethod;
 
 import java.util.List;
 
 @Slf4j
 @Configuration
 public class OpenAPIConfig {
+
+    @Bean
+    public OperationCustomizer customOperationCustomizer() {
+        return (operation, handlerMethod) -> {
+            try {
+                // Скрываем параметры с аннотацией @CurrentUser
+                if (handlerMethod.getMethodParameters() != null) {
+                    for (var parameter : handlerMethod.getMethodParameters()) {
+                        if (parameter.hasParameterAnnotation(CurrentUser.class)) {
+                            String paramName = parameter.getParameterName();
+                            if (operation.getParameters() != null && paramName != null) {
+                                operation.getParameters().removeIf(param ->
+                                        param.getName() != null && param.getName().equals(paramName));
+                                log.debug("Removed parameter: {}", paramName);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Error while customizing operation: {}", e.getMessage());
+            }
+            return operation;
+        };
+    }
 
     @Bean
     public OpenAPI customOpenAPI() {

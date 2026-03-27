@@ -1,3 +1,5 @@
+// Обнови файл: auth/infrastructure/security/SecurityConfig.java
+
 package com.example.autoauction.auth.infrastructure.security;
 
 import org.springframework.context.annotation.Bean;
@@ -22,33 +24,68 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
     private final UserDetailsService userDetailsService;
+    private final JwtAuthenticationEntryPoint authenticationEntryPoint;
+    private final JwtAccessDeniedHandler accessDeniedHandler;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, UserDetailsService userDetailsService) {
+    public SecurityConfig(
+            JwtAuthenticationFilter jwtAuthFilter,
+            UserDetailsService userDetailsService,
+            JwtAuthenticationEntryPoint authenticationEntryPoint,
+            JwtAccessDeniedHandler accessDeniedHandler) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.userDetailsService = userDetailsService;
+        this.authenticationEntryPoint = authenticationEntryPoint;
+        this.accessDeniedHandler = accessDeniedHandler;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
+
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler)
+                )
+
                 .authorizeHttpRequests(auth -> auth
-                        // Публичные эндпоинты - НЕ ТРЕБУЮТ АУТЕНТИФИКАЦИИ
+                        // Публичные эндпоинты
                         .requestMatchers(
-                                new AntPathRequestMatcher("/api/auth/**"),   // ← ЭТО ОБЯЗАТЕЛЬНО!
+                                new AntPathRequestMatcher("/api/auth/**"),
                                 new AntPathRequestMatcher("/swagger-ui/**"),
                                 new AntPathRequestMatcher("/swagger-ui.html"),
                                 new AntPathRequestMatcher("/api-docs/**"),
                                 new AntPathRequestMatcher("/h2-console/**")
                         ).permitAll()
-                        .requestMatchers(new AntPathRequestMatcher("/api/admin/**")).hasRole("ADMIN")  // ← ИСПРАВЛЕНО
+
+                        // Админские эндпоинты - только ADMIN
+                        .requestMatchers(
+                                new AntPathRequestMatcher("/api/admin/**")
+                        ).hasRole("ADMIN")
+
+                        // Диагностик эндпоинты - только DIAGNOSTIC или ADMIN
+                        .requestMatchers(
+                                new AntPathRequestMatcher("/api/diagnostic/**")
+                        ).hasAnyRole("DIAGNOSTIC", "ADMIN")
+
+                        // ← НОВЫЙ БЛОК: Эндпоинты ставок и просмотра аукционов
+                        .requestMatchers(
+                                new AntPathRequestMatcher("/api/auctions/**/bids"),
+                                new AntPathRequestMatcher("/api/auctions/**")
+                        ).authenticated()  // Доступно всем аутентифицированным пользователям
+
+                        // Пользовательские эндпоинты - аутентифицированные пользователи
+                        .requestMatchers(
+                                new AntPathRequestMatcher("/api/users/**")
+                        ).authenticated()
+
+                        // Все остальные запросы требуют аутентификации
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authenticationProvider(authenticationProvider())
-                // Добавляем JWT фильтр, но указываем что он не должен обрабатывать публичные пути
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

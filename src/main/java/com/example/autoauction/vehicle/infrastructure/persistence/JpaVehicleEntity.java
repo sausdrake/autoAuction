@@ -24,7 +24,7 @@ public class JpaVehicleEntity {
     @Column(nullable = false, length = 50)
     private String model;
 
-    @Column(nullable = false)
+    @Column(name = "year", nullable = false)
     private Integer year;
 
     @Column(unique = true, nullable = false, length = 17)

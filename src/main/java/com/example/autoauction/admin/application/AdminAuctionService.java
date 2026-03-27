@@ -8,17 +8,15 @@ import com.example.autoauction.auction.web.dto.AuctionResponse;
 import com.example.autoauction.vehicle.application.VehicleService;
 import com.example.autoauction.vehicle.domain.VehicleStatus;
 import com.example.autoauction.vehicle.web.dto.VehicleResponse;
-import io.swagger.v3.oas.annotations.Operation;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.GetMapping;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
-
 
 @Slf4j
 @Service
@@ -26,10 +24,14 @@ public class AdminAuctionService {
 
     private final AuctionRepository auctionRepository;
     private final VehicleService vehicleService;
+    private final AuctionValidator auctionValidator;
 
-    public AdminAuctionService(AuctionRepository auctionRepository, VehicleService vehicleService) {
+    public AdminAuctionService(AuctionRepository auctionRepository,
+                               VehicleService vehicleService,
+                               AuctionValidator auctionValidator) {
         this.auctionRepository = auctionRepository;
         this.vehicleService = vehicleService;
+        this.auctionValidator = auctionValidator;
         log.info("AdminAuctionService инициализирован");
     }
 
@@ -37,106 +39,174 @@ public class AdminAuctionService {
     public AuctionResponse createAuction(AuctionCreateRequest request, Long adminId) {
         log.info("=== СОЗДАНИЕ АУКЦИОНА ===");
         log.info("Запрос от adminId: {}, vehicleId: {}", adminId, request.vehicleId());
-        log.debug("Детали запроса: startingPrice={}, reservePrice={}, buyNowPrice={}, minBidStep={}",
-                request.startingPrice(), request.reservePrice(), request.buyNowPrice(), request.minBidStep());
-        log.debug("Время начала: {}, время окончания: {}", request.startTime(), request.endTime());
 
-        // 1. Проверяем, существует ли автомобиль
-        log.debug("Шаг 1: Проверка существования автомобиля с ID: {}", request.vehicleId());
-        VehicleResponse vehicle;
+        // 1. Базовая валидация входных данных (проверка на null)
+        auctionValidator.validateBasicRequest(request);
+
+        // 2. Проверяем, существует ли автомобиль и имеет ли статус APPROVED
+        VehicleResponse vehicle = getValidatedVehicle(request.vehicleId());
+
+        // 3. Проверяем бизнес-правила (цены, шаг ставки, время) - ЭТО КЛЮЧЕВОЙ МОМЕНТ!
+        auctionValidator.validateBusinessRules(request, vehicle);
+
+        // 4. Проверяем, нет ли уже существующего аукциона
+        checkExistingAuctions(request.vehicleId());
+
+        // 5. Создаём и сохраняем аукцион
+        return createAndSaveAuction(request, adminId, vehicle);
+    }
+
+    private void checkExistingAuctions(Long vehicleId) {
+        List<AuctionStatus> forbiddenStatuses = List.of(
+                AuctionStatus.ACTIVE,
+                AuctionStatus.CREATED,
+                AuctionStatus.SOLD
+        );
+
+        if (auctionRepository.existsByVehicleIdAndStatusIn(vehicleId, forbiddenStatuses)) {
+            List<AuctionStatus> existingStatuses = auctionRepository.findStatusesByVehicleId(vehicleId);
+
+            if (existingStatuses.contains(AuctionStatus.ACTIVE)) {
+                throw new IllegalArgumentException("Автомобиль уже участвует в активном аукционе");
+            }
+            if (existingStatuses.contains(AuctionStatus.CREATED)) {
+                throw new IllegalArgumentException("Для этого автомобиля уже создан аукцион");
+            }
+            if (existingStatuses.contains(AuctionStatus.SOLD)) {
+                throw new IllegalArgumentException("Автомобиль уже был продан на аукционе");
+            }
+        }
+    }
+
+    private AuctionResponse createAndSaveAuction(AuctionCreateRequest request, Long adminId, VehicleResponse vehicle) {
+        Auction auction = createAuctionFromRequest(request, adminId, vehicle);
+
         try {
-            vehicle = vehicleService.getVehicleDetails(request.vehicleId());
-            log.debug("Автомобиль найден: {} {} {} (VIN: {})",
-                    vehicle.brand(), vehicle.model(), vehicle.year(), vehicle.vin());
-        } catch (IllegalArgumentException e) {
-            log.error("Автомобиль с ID {} не найден", request.vehicleId());
-            throw new IllegalArgumentException("Автомобиль с ID " + request.vehicleId() + " не найден");
+            Auction saved = auctionRepository.save(auction);
+            if (saved == null) {
+                throw new IllegalStateException("Не удалось сохранить аукцион");
+            }
+            log.info("Аукцион успешно создан! ID: {}, vehicleId: {}, статус: {}",
+                    saved.getId(), saved.getVehicleId(), saved.getStatus());
+            return AuctionResponse.fromDomain(saved);
+
+        } catch (DataIntegrityViolationException e) {
+            log.error("Конфликт при создании аукциона для vehicleId: {}", request.vehicleId());
+            throw new DataIntegrityViolationException(
+                    "Для этого автомобиля уже существует аукцион. Пожалуйста, проверьте статусы ACTIVE, CREATED или SOLD.",
+                    e
+            );
+        }
+    }
+    @Transactional
+    public AuctionResponse completeAuction(Long id, Long adminId) {
+        log.info("=== ПРИНУДИТЕЛЬНОЕ ЗАВЕРШЕНИЕ АУКЦИОНА ===");
+        log.info("ID аукциона: {}, Admin ID: {}", id, adminId);
+
+        // Загружаем аукцион с пессимистичной блокировкой
+        Auction auction = auctionRepository.findByIdWithLock(id)
+                .orElseThrow(() -> {
+                    log.error("Аукцион не найден: {}", id);
+                    return new IllegalArgumentException("Аукцион с ID " + id + " не найден");
+                });
+
+        log.debug("Текущий статус аукциона: {}, текущая цена: {}, количество ставок: {}",
+                auction.getStatus(), auction.getCurrentPrice(), auction.getTotalBids());
+
+        // Проверяем, что аукцион активен
+        if (auction.getStatus() != AuctionStatus.ACTIVE) {
+            log.warn("Невозможно завершить аукцион в статусе: {}", auction.getStatus());
+            throw new IllegalStateException(
+                    String.format("Невозможно завершить аукцион в статусе '%s'. Только активные аукционы могут быть завершены",
+                            auction.getStatus())
+            );
         }
 
-        // 2. Проверяем статус автомобиля (должен быть APPROVED)
-        log.debug("Шаг 2: Проверка статуса автомобиля. Текущий статус: {}", vehicle.status());
+        // Проверяем, не истекло ли время окончания
+        OffsetDateTime now = OffsetDateTime.now();
+        if (auction.getEndTime().isAfter(now)) {
+            log.warn("Попытка принудительного завершения аукциона до истечения времени. End time: {}, Now: {}",
+                    auction.getEndTime(), now);
+            // Можно либо разрешить, либо выбросить предупреждение
+            // Разрешаем, но логируем
+        }
+
+        // Финализируем аукцион
+        finalizeAuction(auction);
+
+        // Сохраняем изменения
+        Auction saved = auctionRepository.save(auction);
+        log.info("Аукцион {} успешно завершен. Итоговый статус: {}, Победитель: {}, Выигрышная ставка: {}",
+                saved.getId(), saved.getStatus(), saved.getWinnerId(), saved.getWinningBid());
+
+        return AuctionResponse.fromDomain(saved);
+    }
+
+    /**
+     * Внутренний метод для финализации аукциона
+     */
+    private void finalizeAuction(Auction auction) {
+        // Проверяем, были ли ставки
+        if (auction.getTotalBids() == null || auction.getTotalBids() == 0) {
+            // Нет ставок - аукцион истек
+            auction.setStatus(AuctionStatus.EXPIRED);
+            auction.setWinnerId(null);
+            auction.setWinningBid(null);
+            log.info("Аукцион {} завершен без ставок", auction.getId());
+            return;
+        }
+
+        // Есть ставки - проверяем резервную цену
+        boolean reserveMet = auction.getReservePrice() == null ||
+                auction.getCurrentPrice().compareTo(auction.getReservePrice()) >= 0;
+
+        if (reserveMet) {
+            // Резервная цена достигнута - победитель текущий лидер
+            auction.setStatus(AuctionStatus.COMPLETED);
+            log.info("Аукцион {} завершен успешно. Победитель: {}, Выигрышная ставка: {}, Резервная цена: {}",
+                    auction.getId(), auction.getWinnerId(), auction.getWinningBid(), auction.getReservePrice());
+        } else {
+            // Резервная цена не достигнута - аукцион не состоялся
+            auction.setStatus(AuctionStatus.EXPIRED);
+            auction.setWinnerId(null);
+            auction.setWinningBid(null);
+            log.info("Аукцион {} завершен без продажи. Резервная цена {} не достигнута. Финальная цена: {}",
+                    auction.getId(), auction.getReservePrice(), auction.getCurrentPrice());
+        }
+
+        auction.setUpdatedAt(OffsetDateTime.now());
+    }
+
+    private VehicleResponse getValidatedVehicle(Long vehicleId) {
+        log.debug("Проверка автомобиля с ID: {}", vehicleId);
+
+        VehicleResponse vehicle;
+        try {
+            vehicle = vehicleService.getVehicleDetails(vehicleId);
+            if (vehicle == null) {
+                throw new IllegalArgumentException("Автомобиль с ID " + vehicleId + " не найден");
+            }
+        } catch (IllegalArgumentException e) {
+            log.error("Автомобиль с ID {} не найден", vehicleId);
+            throw new IllegalArgumentException("Автомобиль с ID " + vehicleId + " не найден");
+        }
+
         if (!VehicleStatus.APPROVED.equals(vehicle.status())) {
             log.error("Нельзя создать аукцион для автомобиля в статусе {}. Требуется статус APPROVED",
                     vehicle.status());
             throw new IllegalArgumentException(
-                    "Нельзя создать аукцион для автомобиля в статусе " + vehicle.status() +
-                            ". Требуется статус APPROVED."
+                    String.format("Нельзя создать аукцион для автомобиля в статусе %s. Требуется статус APPROVED",
+                            vehicle.status())
             );
         }
-        log.debug("Статус автомобиля APPROVED - ок");
 
-        // 3. Проверяем, нет ли уже активного аукциона для этого авто
-        log.debug("Шаг 3: Проверка наличия активного аукциона для vehicleId: {}", request.vehicleId());
-        if (auctionRepository.existsByVehicleIdAndStatus(request.vehicleId(), AuctionStatus.ACTIVE)) {
-            log.error("Автомобиль уже участвует в активном аукционе (статус ACTIVE)");
-            throw new IllegalArgumentException(
-                    "Автомобиль уже участвует в активном аукционе (статус ACTIVE)"
-            );
-        }
-        log.debug("Активных аукционов не найдено");
+        log.debug("Автомобиль найден и одобрен: {} {} {} (VIN: {})",
+                vehicle.brand(), vehicle.model(), vehicle.year(), vehicle.vin());
 
-        // 4. Проверяем, нет ли созданного, но неактивного аукциона
-        log.debug("Шаг 4: Проверка наличия созданного аукциона для vehicleId: {}", request.vehicleId());
-        if (auctionRepository.existsByVehicleIdAndStatus(request.vehicleId(), AuctionStatus.CREATED)) {
-            log.error("Для этого автомобиля уже создан аукцион (статус CREATED)");
-            throw new IllegalArgumentException(
-                    "Для этого автомобиля уже создан аукцион (статус CREATED)"
-            );
-        }
-        log.debug("Созданных аукционов не найдено");
+        return vehicle;
+    }
 
-        // 5. Проверяем, не был ли автомобиль уже продан
-        log.debug("Шаг 5: Проверка, не был ли автомобиль уже продан");
-        if (auctionRepository.existsByVehicleIdAndStatus(request.vehicleId(), AuctionStatus.SOLD)) {
-            log.error("Автомобиль уже был продан на аукционе");
-            throw new IllegalArgumentException(
-                    "Автомобиль уже был продан на аукционе"
-            );
-        }
-        log.debug("Автомобиль не продавался ранее");
-
-        // 6. Валидация цен
-        log.debug("Шаг 6: Валидация цен");
-        if (request.startingPrice().compareTo(request.reservePrice()) > 0) {
-            log.error("Резервная цена ({}) не может быть меньше стартовой ({})",
-                    request.reservePrice(), request.startingPrice());
-            throw new IllegalArgumentException("Резервная цена не может быть меньше стартовой");
-        }
-        log.debug("Стартовая цена и резервная цена корректны");
-
-        if (request.buyNowPrice() != null &&
-                request.buyNowPrice().compareTo(request.startingPrice()) <= 0) {
-            log.error("Цена мгновенной покупки ({}) должна быть больше стартовой ({})",
-                    request.buyNowPrice(), request.startingPrice());
-            throw new IllegalArgumentException("Цена мгновенной покупки должна быть больше стартовой");
-        }
-        log.debug("Цена мгновенной покупки корректна");
-
-        BigDecimal minBidStepPercent = request.startingPrice().multiply(new BigDecimal("0.01"));
-        if (request.minBidStep().compareTo(minBidStepPercent) < 0) {
-            log.error("Шаг ставки ({}) не может быть меньше 1% от стартовой цены ({})",
-                    request.minBidStep(), minBidStepPercent);
-            throw new IllegalArgumentException("Шаг ставки не может быть меньше 1% от стартовой цены");
-        }
-        log.debug("Шаг ставки корректен");
-
-        // 7. Проверка времени
-        log.debug("Шаг 7: Проверка времени");
-        if (request.startTime().isBefore(OffsetDateTime.now())) {
-            log.error("Время начала ({}) не может быть в прошлом", request.startTime());
-            throw new IllegalArgumentException("Время начала не может быть в прошлом");
-        }
-        log.debug("Время начала корректно");
-
-        if (request.endTime().isBefore(request.startTime())) {
-            log.error("Время окончания ({}) должно быть позже времени начала ({})",
-                    request.endTime(), request.startTime());
-            throw new IllegalArgumentException("Время окончания должно быть позже времени начала");
-        }
-        log.debug("Время окончания корректно");
-
-        // 8. Создаём аукцион
-        log.debug("Шаг 8: Создание объекта Auction");
+    private Auction createAuctionFromRequest(AuctionCreateRequest request, Long adminId, VehicleResponse vehicle) {
         Auction auction = new Auction(
                 request.vehicleId(),
                 request.startingPrice(),
@@ -148,32 +218,19 @@ public class AdminAuctionService {
                 adminId
         );
 
-        // 9. Сохраняем информацию об автомобиле (для кэширования)
         String vehicleInfo = String.format("%s %s %d (VIN: %s)",
-                vehicle.brand(),
-                vehicle.model(),
-                vehicle.year(),
-                vehicle.vin()
-        );
+                vehicle.brand(), vehicle.model(), vehicle.year(), vehicle.vin());
         auction.setVehicleInfo(vehicleInfo);
-        log.debug("Информация об автомобиле для кэширования: {}", vehicleInfo);
 
-        log.debug("Шаг 9: Сохранение аукциона в БД");
-        Auction saved = auctionRepository.save(auction);
-        log.info("Аукцион успешно создан! ID: {}, vehicleId: {}, статус: {}",
-                saved.getId(), saved.getVehicleId(), saved.getStatus());
-
-        return AuctionResponse.fromDomain(saved);
+        return auction;
     }
 
     @Transactional(readOnly = true)
     public List<AuctionResponse> getAllAuctions() {
         log.debug("=== ПОЛУЧЕНИЕ ВСЕХ АУКЦИОНОВ ===");
-        List<AuctionResponse> auctions = auctionRepository.findAll().stream()
+        return auctionRepository.findAll().stream()
                 .map(AuctionResponse::fromDomain)
                 .collect(Collectors.toList());
-        log.debug("Найдено аукционов: {}", auctions.size());
-        return auctions;
     }
 
     @Transactional(readOnly = true)
@@ -187,7 +244,7 @@ public class AdminAuctionService {
                 })
                 .orElseThrow(() -> {
                     log.error("Аукцион не найден: {}", id);
-                    return new IllegalArgumentException("Аукцион не найден: " + id);
+                    return new IllegalArgumentException("Аукцион с ID " + id + " не найден");
                 });
     }
 
@@ -196,19 +253,24 @@ public class AdminAuctionService {
         log.info("=== ЗАПУСК АУКЦИОНА ===");
         log.info("ID аукциона: {}, adminId: {}", id, adminId);
 
-        Auction auction = auctionRepository.findById(id)
+        Auction auction = auctionRepository.findByIdWithLock(id)
                 .orElseThrow(() -> {
                     log.error("Аукцион не найден: {}", id);
-                    return new IllegalArgumentException("Аукцион не найден: " + id);
+                    return new IllegalArgumentException("Аукцион с ID " + id + " не найден");
                 });
+
+        if (auction.getStatus() == AuctionStatus.ACTIVE) {
+            throw new IllegalStateException("Аукцион уже запущен");
+        }
 
         log.debug("Текущий статус аукциона: {}", auction.getStatus());
         auction.start();
         log.info("Аукцион запущен, новый статус: {}", auction.getStatus());
 
         Auction saved = auctionRepository.save(auction);
-        log.debug("Аукцион сохранен в БД");
-
+        if (saved == null) {
+            throw new IllegalStateException("Не удалось сохранить аукцион после запуска");
+        }
         return AuctionResponse.fromDomain(saved);
     }
 
@@ -217,10 +279,10 @@ public class AdminAuctionService {
         log.info("=== ОТМЕНА АУКЦИОНА ===");
         log.info("ID аукциона: {}, adminId: {}", id, adminId);
 
-        Auction auction = auctionRepository.findById(id)
+        Auction auction = auctionRepository.findByIdWithLock(id)
                 .orElseThrow(() -> {
                     log.error("Аукцион не найден: {}", id);
-                    return new IllegalArgumentException("Аукцион не найден: " + id);
+                    return new IllegalArgumentException("Аукцион с ID " + id + " не найден");
                 });
 
         log.debug("Текущий статус аукциона: {}", auction.getStatus());
@@ -228,38 +290,31 @@ public class AdminAuctionService {
         log.info("Аукцион отменен, новый статус: {}", auction.getStatus());
 
         Auction saved = auctionRepository.save(auction);
-        log.debug("Аукцион сохранен в БД");
-
+        if (saved == null) {
+            throw new IllegalStateException("Не удалось сохранить аукцион после отмены");
+        }
         return AuctionResponse.fromDomain(saved);
     }
 
     @Transactional(readOnly = true)
     public List<AuctionResponse> getAuctionsByStatus(String status) {
         log.debug("=== ПОЛУЧЕНИЕ АУКЦИОНОВ ПО СТАТУСУ: {} ===", status);
-        AuctionStatus auctionStatus = AuctionStatus.valueOf(status.toUpperCase());
-        List<AuctionResponse> auctions = auctionRepository.findByStatus(auctionStatus).stream()
-                .map(AuctionResponse::fromDomain)
-                .collect(Collectors.toList());
-        log.debug("Найдено аукционов со статусом {}: {}", status, auctions.size());
-        return auctions;
-    }
-
-    @GetMapping("/approved-vehicles")
-    @Operation(summary = "Получить список автомобилей готовых к аукциону")
-    public List<VehicleResponse> getApprovedVehicles() {
-        log.debug("=== ПОЛУЧЕНИЕ АВТОМОБИЛЕЙ СО СТАТУСОМ APPROVED ===");
-        List<VehicleResponse> vehicles = vehicleService.getVehiclesByStatus(VehicleStatus.APPROVED);
-        log.debug("Найдено автомобилей: {}", vehicles.size());
-        return vehicles;
+        try {
+            AuctionStatus auctionStatus = AuctionStatus.valueOf(status.toUpperCase());
+            return auctionRepository.findByStatus(auctionStatus).stream()
+                    .map(AuctionResponse::fromDomain)
+                    .collect(Collectors.toList());
+        } catch (IllegalArgumentException e) {
+            log.error("Неверный статус аукциона: {}", status);
+            throw new IllegalArgumentException("Неверный статус аукциона: " + status);
+        }
     }
 
     @Transactional(readOnly = true)
     public List<AuctionResponse> getAuctionsByVehicleId(Long vehicleId) {
         log.debug("=== ПОЛУЧЕНИЕ АУКЦИОНОВ ПО ID АВТОМОБИЛЯ: {} ===", vehicleId);
-        List<AuctionResponse> auctions = auctionRepository.findByVehicleId(vehicleId).stream()
+        return auctionRepository.findByVehicleId(vehicleId).stream()
                 .map(AuctionResponse::fromDomain)
                 .collect(Collectors.toList());
-        log.debug("Найдено аукционов для автомобиля {}: {}", vehicleId, auctions.size());
-        return auctions;
     }
 }

@@ -1,18 +1,19 @@
 package com.example.autoauction.vehicle.web;
 
+import com.example.autoauction.auth.domain.UserPrincipal;
+import com.example.autoauction.auth.infrastructure.security.CurrentUser;
 import com.example.autoauction.vehicle.application.VehicleService;
 import com.example.autoauction.vehicle.domain.VehicleStatus;
 import com.example.autoauction.vehicle.web.dto.VehicleCreateRequest;
 import com.example.autoauction.vehicle.web.dto.VehicleUpdateRequest;
 import com.example.autoauction.vehicle.web.dto.VehicleResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -33,10 +34,10 @@ public class DiagnosticVehicleController {
     @Operation(summary = "Создать черновик отчета")
     public ResponseEntity<VehicleResponse> createDraft(
             @Valid @RequestBody VehicleCreateRequest request,
-            @AuthenticationPrincipal UserDetails currentUser) {
-
-        // TODO: получить реальные данные диагностика из SecurityContext
-        Long diagnosticId = 1L;
+            @Parameter(hidden = true)
+            @CurrentUser UserPrincipal currentUser
+    ) {
+        Long diagnosticId = currentUser.getUserId();
         String diagnosticName = currentUser.getUsername();
 
         VehicleResponse response = vehicleService.createDraft(request, diagnosticId, diagnosticName);
@@ -47,19 +48,22 @@ public class DiagnosticVehicleController {
     @Operation(summary = "Получить мои отчеты")
     public List<VehicleResponse> getMyVehicles(
             @RequestParam(required = false) VehicleStatus status,
-            @AuthenticationPrincipal UserDetails currentUser) {
-
-        Long diagnosticId = 1L; // TODO: получить из SecurityContext
+            @Parameter(hidden = true)
+            @CurrentUser UserPrincipal currentUser
+    ) {
+        Long diagnosticId = currentUser.getUserId();
         return vehicleService.getMyVehicles(diagnosticId, status);
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Получить отчет по ID")
     public ResponseEntity<VehicleResponse> getVehicle(
+            @Parameter(description = "ID автомобиля", required = true)
             @PathVariable Long id,
-            @AuthenticationPrincipal UserDetails currentUser) {
-
-        Long diagnosticId = 1L; // TODO: получить из SecurityContext
+            @Parameter(hidden = true)
+            @CurrentUser UserPrincipal currentUser
+    ) {
+        Long diagnosticId = currentUser.getUserId();
         VehicleResponse response = vehicleService.getVehicle(id, diagnosticId);
         return ResponseEntity.ok(response);
     }
@@ -67,11 +71,13 @@ public class DiagnosticVehicleController {
     @PutMapping("/{id}")
     @Operation(summary = "Обновить черновик (только изменяемые поля)")
     public ResponseEntity<VehicleResponse> updateDraft(
+            @Parameter(description = "ID автомобиля", required = true)
             @PathVariable Long id,
             @Valid @RequestBody VehicleUpdateRequest request,
-            @AuthenticationPrincipal UserDetails currentUser) {
-
-        Long diagnosticId = 1L; // TODO: получить из SecurityContext
+            @Parameter(hidden = true)
+            @CurrentUser UserPrincipal currentUser
+    ) {
+        Long diagnosticId = currentUser.getUserId();
         VehicleResponse response = vehicleService.updateDraft(id, request, diagnosticId);
         return ResponseEntity.ok(response);
     }
@@ -79,10 +85,12 @@ public class DiagnosticVehicleController {
     @PostMapping("/{id}/submit")
     @Operation(summary = "Отправить на проверку")
     public ResponseEntity<VehicleResponse> submitForReview(
+            @Parameter(description = "ID автомобиля", required = true)
             @PathVariable Long id,
-            @AuthenticationPrincipal UserDetails currentUser) {
-
-        Long diagnosticId = 1L; // TODO: получить из SecurityContext
+            @Parameter(hidden = true)
+            @CurrentUser UserPrincipal currentUser
+    ) {
+        Long diagnosticId = currentUser.getUserId();
         VehicleResponse response = vehicleService.submitForReview(id, diagnosticId);
         return ResponseEntity.ok(response);
     }
@@ -90,10 +98,12 @@ public class DiagnosticVehicleController {
     @DeleteMapping("/{id}")
     @Operation(summary = "Удалить черновик")
     public ResponseEntity<Void> deleteDraft(
+            @Parameter(description = "ID автомобиля", required = true)
             @PathVariable Long id,
-            @AuthenticationPrincipal UserDetails currentUser) {
-
-        Long diagnosticId = 1L; // TODO: получить из SecurityContext
+            @Parameter(hidden = true)
+            @CurrentUser UserPrincipal currentUser
+    ) {
+        Long diagnosticId = currentUser.getUserId();
         vehicleService.deleteDraft(id, diagnosticId);
         return ResponseEntity.noContent().build();
     }

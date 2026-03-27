@@ -28,6 +28,7 @@ public class AuthController {
     public ResponseEntity<AuthService.AuthResponse> register(
             @Valid @RequestBody RegisterRequest request
     ) {
+        log.info("Registration request for username: {}", request.username());
         AuthService.AuthResponse response = authService.register(
                 new AuthService.RegisterRequest(
                         request.username(),
@@ -35,30 +36,52 @@ public class AuthController {
                         request.password()
                 )
         );
+        log.info("User registered successfully: {}", request.username());
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/login")
     @Operation(summary = "Вход в систему")
-    public ResponseEntity<AuthService.AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-        System.out.println("=== LOGIN ATTEMPT ===");
-        System.out.println("Username: " + request.username());
-        System.out.println("Password: " + request.password());
-
+    public ResponseEntity<AuthService.AuthResponse> login(
+            @Valid @RequestBody LoginRequest request
+    ) {
+        log.info("Login attempt for username: {}", request.username());
         AuthService.AuthResponse response = authService.authenticate(
                 new AuthService.LoginRequest(
                         request.username(),
                         request.password()
                 )
         );
-
-        System.out.println("=== LOGIN SUCCESS ===");
+        log.info("Login successful for username: {}", request.username());
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/refresh")
+    @Operation(summary = "Обновить access token")
+    public ResponseEntity<AuthService.AuthResponse> refreshToken(
+            @Valid @RequestBody RefreshTokenRequest request
+    ) {
+        log.debug("Refresh token request received");
+        AuthService.AuthResponse response = authService.refreshToken(
+                new AuthService.RefreshTokenRequest(request.refreshToken())
+        );
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/logout")
+    @Operation(summary = "Выход из системы")
+    public ResponseEntity<Void> logout(
+            @Valid @RequestBody LogoutRequest request
+    ) {
+        log.info("Logout request received");
+        authService.logout(new AuthService.LogoutRequest(request.refreshToken()));
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/create-hash")
     @Operation(summary = "Создать хеш пароля (временный)")
     public String createHash(@RequestParam String password) {
+        log.warn("Password hash generation endpoint used (temporary)");
         return authService.createPasswordHash(password);
     }
 
@@ -71,5 +94,13 @@ public class AuthController {
     public record LoginRequest(
             @NotBlank String username,
             @NotBlank String password
+    ) {}
+
+    public record RefreshTokenRequest(
+            @NotBlank String refreshToken
+    ) {}
+
+    public record LogoutRequest(
+            @NotBlank String refreshToken
     ) {}
 }

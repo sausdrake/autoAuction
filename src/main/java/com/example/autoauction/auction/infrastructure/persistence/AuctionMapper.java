@@ -33,6 +33,7 @@ public class AuctionMapper {
         entity.setCreatedBy(domain.getCreatedBy());
         entity.setCreatedAt(domain.getCreatedAt());
         entity.setUpdatedAt(domain.getUpdatedAt());
+        entity.setVersion(domain.getVersion());
         return entity;
     }
 
@@ -51,7 +52,7 @@ public class AuctionMapper {
                 entity.getCreatedBy()
         );
 
-        // Устанавливаем остальные поля через методы (их нужно добавить в Auction)
+        // Устанавливаем остальные поля через методы
         auction.setId(entity.getId());
         auction.setCurrentPrice(entity.getCurrentPrice());
         auction.setStatus(entity.getStatus());
@@ -61,6 +62,7 @@ public class AuctionMapper {
         auction.setVehicleInfo(entity.getVehicleInfo());
         auction.setCreatedAt(entity.getCreatedAt());
         auction.setUpdatedAt(entity.getUpdatedAt());
+        auction.setVersion(entity.getVersion());
 
         return auction;
     }
