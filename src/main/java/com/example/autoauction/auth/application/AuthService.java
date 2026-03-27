@@ -3,6 +3,7 @@ package com.example.autoauction.auth.application;
 import com.example.autoauction.auth.domain.RefreshToken;
 import com.example.autoauction.auth.domain.port.RefreshTokenRepository;
 import com.example.autoauction.auth.infrastructure.security.JwtService;
+import com.example.autoauction.deposit.application.DepositService;
 import com.example.autoauction.user.domain.Role;
 import com.example.autoauction.user.domain.User;
 import com.example.autoauction.user.domain.port.RoleRepository;
@@ -17,6 +18,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Set;
 
@@ -27,6 +29,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final DepositService depositService;  // ← Добавляем
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
@@ -36,6 +39,7 @@ public class AuthService {
             UserRepository userRepository,
             RoleRepository roleRepository,
             RefreshTokenRepository refreshTokenRepository,
+            DepositService depositService,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             AuthenticationManager authenticationManager,
@@ -43,6 +47,7 @@ public class AuthService {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.refreshTokenRepository = refreshTokenRepository;
+        this.depositService = depositService;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.authenticationManager = authenticationManager;
@@ -79,6 +84,15 @@ public class AuthService {
 
         User savedUser = userRepository.save(user);
         log.info("User created successfully with ID: {}", savedUser.getId());
+
+        // ← АВТОМАТИЧЕСКИ СОЗДАЕМ ДЕПОЗИТ С НУЛЕВЫМ БАЛАНСОМ
+        try {
+            depositService.createDeposit(savedUser.getId(), BigDecimal.ZERO);
+            log.info("Deposit automatically created for user: {}", savedUser.getId());
+        } catch (Exception e) {
+            log.error("Failed to create deposit for user {}: {}", savedUser.getId(), e.getMessage());
+            // Не блокируем регистрацию, если депозит не создался
+        }
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(savedUser.getUsername());
         String jwtToken = jwtService.generateToken(userDetails);
